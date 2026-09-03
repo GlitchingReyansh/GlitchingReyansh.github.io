@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pulse — Stopwatch &amp; Timer</title>
+<style>
+  :root{
+    --black:#0a0a0b; --charcoal:#161618; --steel:#3a3a3f;
+    --grey:#8a8a92; --silver:#c9c9ce; --white:#f4f4f6;
+    --accent:#e8e8ec;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 20%, #1c1c1f, var(--black) 70%);
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif; color:var(--white);
+    perspective:1400px; overflow:hidden;
+  }
+  .stage{ display:flex; flex-direction:column; align-items:center; gap:2rem; }
+
+  .mode-switch{ display:flex; gap:.4rem; background:var(--charcoal); padding:.4rem; border-radius:999px; border:1px solid #2a2a2e; }
+  .mode-switch button{
+    padding:.55rem 1.4rem; border:none; border-radius:999px; background:transparent; color:var(--grey);
+    font-size:.85rem; letter-spacing:.03em; cursor:pointer; transition:.25s;
+  }
+  .mode-switch button.active{ background:linear-gradient(160deg,var(--silver),#9a9aa1); color:var(--black); font-weight:600; }
+
+  .dial-wrap{ position:relative; width:340px; height:340px; transform-style:preserve-3d; transform:rotateX(8deg); transition:transform .4s; }
+  .dial-wrap:hover{ transform:rotateX(2deg) rotateY(4deg); }
+
+  .ring{
+    position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(from 0deg, var(--steel), var(--charcoal) 40%, var(--steel) 60%, var(--charcoal));
+    box-shadow:
+      0 30px 60px -10px rgba(0,0,0,.7),
+      0 10px 20px -5px rgba(0,0,0,.5),
+      inset 0 2px 4px rgba(255,255,255,.08),
+      inset 0 -6px 14px rgba(0,0,0,.6);
+    transform:translateZ(0);
+  }
+  .face{
+    position:absolute; inset:16px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #232326, var(--black) 75%);
+    box-shadow:inset 0 4px 12px rgba(0,0,0,.8), inset 0 -2px 6px rgba(255,255,255,.05);
+    transform:translateZ(20px);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+  }
+  .ticks{ position:absolute; inset:0; }
+  .tick{ position:absolute; left:50%; top:8px; width:2px; height:10px; background:var(--grey); transform-origin:1px 162px; opacity:.5;}
+  .tick.major{ height:16px; width:3px; background:var(--silver); opacity:.9; }
+
+  .time{ font-size:2.6rem; font-variant-numeric:tabular-nums; font-weight:300; letter-spacing:.02em; z-index:2; text-shadow:0 2px 8px rgba(0,0,0,.6); }
+  .ms{ font-size:1rem; color:var(--grey); margin-top:.2rem; z-index:2; }
+
+  .hand{
+    position:absolute; left:50%; top:50%; width:3px; height:120px;
+    background:linear-gradient(to top, var(--white), var(--grey));
+    transform-origin:50% 100%; transform:translate(-50%,-100%) rotate(0deg);
+    border-radius:3px; z-index:1; box-shadow:0 0 8px rgba(255,255,255,.3);
+    transition:transform .05s linear;
+  }
+  .hub{ position:absolute; left:50%; top:50%; width:14px; height:14px; background:var(--silver); border-radius:50%; transform:translate(-50%,-50%) translateZ(24px); box-shadow:0 2px 6px rgba(0,0,0,.6); z-index:3; }
+
+  .controls{ display:flex; gap:1rem; }
+  .btn{
+    width:64px; height:64px; border-radius:50%; border:1px solid #2e2e32; cursor:pointer;
+    background:linear-gradient(160deg, #2b2b2f, #17171a);
+    color:var(--white); font-size:.8rem; letter-spacing:.02em;
+    box-shadow:0 8px 16px rgba(0,0,0,.5), inset 0 1px 1px rgba(255,255,255,.08);
+    transition:transform .15s, box-shadow .15s;
+  }
+  .btn:active{ transform:translateY(3px) scale(.97); box-shadow:0 3px 6px rgba(0,0,0,.5); }
+  .btn.primary{ background:linear-gradient(160deg, var(--silver), #8d8d93); color:var(--black); font-weight:600; }
+  .btn.danger{ color:#d8d8dc; }
+
+  .laps{ width:340px; max-height:130px; overflow-y:auto; font-size:.85rem; color:var(--grey); }
+  .laps div{ display:flex; justify-content:space-between; padding:.35rem .2rem; border-bottom:1px solid #201f22; }
+  .laps::-webkit-scrollbar{width:4px;} .laps::-webkit-scrollbar-thumb{background:var(--steel); border-radius:4px;}
+
+  .timer-input{ display:none; gap:.6rem; }
+  .timer-input.show{ display:flex; }
+  .timer-input input{
+    width:70px; text-align:center; font-size:1.3rem; background:var(--charcoal); color:var(--white);
+    border:1px solid #2e2e32; border-radius:8px; padding:.4rem 0; font-variant-numeric:tabular-nums;
+  }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="mode-switch">
+    <button id="modeStopwatch" class="active">Stopwatch</button>
+    <button id="modeTimer">Timer</button>
+  </div>
+
+  <div id="timerInput" class="timer-input">
+    <input id="hh" type="number" min="0" max="99" value="00">
+    <input id="mm" type="number" min="0" max="59" value="05">
+    <input id="ss" type="number" min="0" max="59" value="00">
+  </div>
+
+  <div class="dial-wrap">
+    <div class="ring"></div>
+    <div class="face">
+      <div class="ticks" id="ticks"></div>
+      <div class="time" id="display">00:00</div>
+      <div class="ms" id="msDisplay">.00</div>
+    </div>
+    <div class="hand" id="hand"></div>
+    <div class="hub"></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="startBtn">Start</button>
+    <button class="btn" id="lapBtn">Lap</button>
+    <button class="btn danger" id="resetBtn">Reset</button>
+  </div>
+
+  <div class="laps" id="laps"></div>
+</div>
+
+<script>
+  // build ticks
+  const ticksEl = document.getElementById('ticks');
+  for(let i=0;i<60;i++){
+    const t = document.createElement('div');
+    t.className = 'tick' + (i%5===0 ? ' major':'');
+    t.style.transform = `rotate(${i*6}deg)`;
+    ticksEl.appendChild(t);
+  }
+
+  const display = document.getElementById('display');
+  const msDisplay = document.getElementById('msDisplay');
+  const hand = document.getElementById('hand');
+  const startBtn = document.getElementById('startBtn');
+  const lapBtn = document.getElementById('lapBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const lapsEl = document.getElementById('laps');
+  const modeStopwatch = document.getElementById('modeStopwatch');
+  const modeTimer = document.getElementById('modeTimer');
+  const timerInput = document.getElementById('timerInput');
+  const hh = document.getElementById('hh'), mm = document.getElementById('mm'), ss = document.getElementById('ss');
+
+  let mode = 'stopwatch';
+  let running = false, startTime = 0, elapsed = 0, rafId = null;
+  let timerDuration = 0, lapCount = 0;
+
+  function fmt(ms, withMs){
+    const totalSec = Math.floor(ms/1000);
+    const h = Math.floor(totalSec/3600);
+    const m = Math.floor((totalSec%3600)/60);
+    const s = totalSec%60;
+    const cs = Math.floor((ms%1000)/10);
+    let str = h>0 ? `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+                  : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    return withMs ? [str, '.'+String(cs).padStart(2,'0')] : [str,''];
+  }
+
+  function tick(){
+    let now = Date.now();
+    let ms;
+    if(mode === 'stopwatch'){
+      ms = elapsed + (now - startTime);
+      const [str, dec] = fmt(ms, true);
+      display.textContent = str; msDisplay.textContent = dec;
+      hand.style.transform = `translate(-50%,-100%) rotate(${(ms/1000%60)*6}deg)`;
+    } else {
+      ms = timerDuration - (elapsed + (now - startTime));
+      if(ms <= 0){
+        ms = 0; running=false; cancelAnimationFrame(rafId);
+        startBtn.textContent = 'Start';
+        display.textContent = '00:00'; msDisplay.textContent='.00';
+        hand.style.transform = `translate(-50%,-100%) rotate(0deg)`;
+        return;
+      }
+      const [str, dec] = fmt(ms, true);
+      display.textContent = str; msDisplay.textContent = dec;
+      hand.style.transform = `translate(-50%,-100%) rotate(${(ms/1000%60)*6}deg)`;
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function start(){
+    if(mode === 'timer' && timerDuration === 0 && elapsed === 0){
+      timerDuration = (Number(hh.value)*3600 + Number(mm.value)*60 + Number(ss.value)) * 1000;
+      if(timerDuration <= 0) return;
+    }
+    running = true; startTime = Date.now();
+    startBtn.textContent = 'Pause';
+    rafId = requestAnimationFrame(tick);
+  }
+  function pause(){
+    running = false; elapsed += Date.now() - startTime;
+    cancelAnimationFrame(rafId);
+    startBtn.textContent = 'Start';
+  }
+  function reset(){
+    running = false; elapsed = 0; timerDuration = 0; lapCount = 0;
+    cancelAnimationFrame(rafId);
+    display.textContent = '00:00'; msDisplay.textContent = '.00';
+    hand.style.transform = 'translate(-50%,-100%) rotate(0deg)';
+    startBtn.textContent = 'Start';
+    lapsEl.innerHTML = '';
+  }
+
+  startBtn.addEventListener('click', () => running ? pause() : start());
+  resetBtn.addEventListener('click', reset);
+  lapBtn.addEventListener('click', () => {
+    if(mode !== 'stopwatch' || !running) return;
+    lapCount++;
+    const now = Date.now();
+    const ms = elapsed + (now - startTime);
+    const [str, dec] = fmt(ms, true);
+    const row = document.createElement('div');
+    row.innerHTML = `<span>Lap ${lapCount}</span><span>${str}${dec}</span>`;
+    lapsEl.prepend(row);
+  });
+
+  modeStopwatch.addEventListener('click', () => {
+    if(mode === 'stopwatch') return;
+    mode = 'stopwatch'; reset();
+    modeStopwatch.classList.add('active'); modeTimer.classList.remove('active');
+    timerInput.classList.remove('show'); lapBtn.classList.remove('hidden');
+  });
+  modeTimer.addEventListener('click', () => {
+    if(mode === 'timer') return;
+    mode = 'timer'; reset();
+    modeTimer.classList.add('active'); modeStopwatch.classList.remove('active');
+    timerInput.classList.add('show'); lapBtn.classList.add('hidden');
+  });
+</script>
+</body>
+</html>
